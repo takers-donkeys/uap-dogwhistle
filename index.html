@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>🛸 UAP Signal Generator</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #111;
+            color: #0f0;
+            padding: 2em;
+        }
+
+        button {
+            background: #000;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 0.5em 1em;
+            margin: 0.5em;
+            cursor: pointer;
+        }
+
+        pre {
+            background: #000;
+            padding: 1em;
+            border: 1px solid #0f0;
+            overflow: auto;
+            max-width: 1000px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🛸 UAP Signal Generator</h1>
+    <button onclick="startSignal()">Start (Straight Mode)</button>
+    <button onclick="stopSignal()">Stop</button>
+    <button onclick="togglePulseMode()">Toggle Pulse Mode</button>
+    <section>
+        <h2>Description of Work</h2>
+        <p>This tool emulates the layered signal described by Jason Wilde as a psychoacoustic "dog whistle" for UAP
+            interaction. Built in JavaScript using the Web Audio API, it creates a multi-voiced signal composite
+            structured for low-volume, symbolic broadcasting. Each component of the original signal has been carefully
+            translated into audio synthesis logic.</p>
+
+        <h2>Signal Components</h2>
+        <ul>
+            <li><strong>7.83 Hz Carrier via 100 Hz Modulation:</strong> A 100 Hz sine wave is amplitude-modulated by a
+                7.83 Hz LFO to simulate the Schumann resonance.</li>
+            <li><strong>528 Hz Harmonic:</strong> Pure sine tone with slow amplitude modulation to produce perceptual
+                pulsation.</li>
+            <li><strong>17 kHz Ultrasonic Ping:</strong> Short 100ms pulses at 17,000 Hz fired at random 2–5 second
+                intervals to simulate signaling detectable by non-human intelligence.</li>
+            <li><strong>2.5 kHz Organic Chirps:</strong> Sawtooth wave bursts centered near 2,500 Hz with ±50 Hz pitch
+                jitter and interval variability between 9 and 11 seconds, modeling biological unpredictability.</li>
+            <li><strong>432 Hz Ambient Pad:</strong> A soft background sine tone with very slow gain oscillation, acting
+                as a masking or smoothing layer.</li>
+            <li><strong>Breath Layer:</strong> Bandpass-filtered white noise shaped with slow gain modulation to create
+                a quasi-biological ambient texture.</li>
+        </ul>
+
+        <h2>Pulse Mode</h2>
+        <p>When enabled, Pulse Mode globally gates the entire audio signal on/off every 15 seconds. This models the
+            “pulse it” behavior referenced in the original post. When disabled, the signal plays continuously (“play it
+            straight”).</p>
+
+        <h2>Limitations</h2>
+        <ul>
+            <li>True subsonic (<20 Hz) and ultrasonic (>20 kHz) effects are symbolically represented; consumer hardware
+                    cannot reproduce them accurately.</li>
+            <li>17 kHz may be inaudible on laptop or phone speakers and to some adults.</li>
+            <li>7.83 Hz is not directly audible and is only represented through modulation behavior.</li>
+        </ul>
+
+        <h2>Intended Use</h2>
+        <p>This is a conceptual tool for signal simulation, artistic demonstration, or fringe research purposes. It is
+            not a field-grade transducer nor a verified communications system. Use in quiet environments with headphones
+            or external speakers for best fidelity.</p>
+    </section>
+
+    <script>
+        let audioCtx;
+        let nodes = [];
+        let pulseMode = false;
+        let pulseInterval;
+        let pulseGain;
+
+        function createModulatedCarrier() {
+            const mod = audioCtx.createOscillator(); // 7.83 Hz modulator
+            const modGain = audioCtx.createGain();
+            mod.frequency.value = 7.83;
+            modGain.gain.value = 0.5;
+
+            const carrier = audioCtx.createOscillator(); // 100 Hz carrier
+            const carrierGain = audioCtx.createGain();
+            carrier.frequency.value = 100;
+            carrier.type = 'sine';
+
+            mod.connect(modGain).connect(carrierGain.gain);
+            carrier.connect(carrierGain).connect(pulseGain);
+            mod.start();
+            carrier.start();
+
+            nodes.push(mod, modGain, carrier, carrierGain);
+        }
+
+        function createDynamicTone(freq, gainVal, lfoFreq) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const lfo = audioCtx.createOscillator();
+            const lfoGain = audioCtx.createGain();
+
+            osc.frequency.value = freq;
+            osc.type = 'sine';
+            gain.gain.value = gainVal;
+
+            lfo.frequency.value = lfoFreq;
+            lfoGain.gain.value = gainVal * 0.5;
+
+            lfo.connect(lfoGain).connect(gain.gain);
+            osc.connect(gain).connect(pulseGain);
+
+            osc.start();
+            lfo.start();
+
+            nodes.push(osc, gain, lfo, lfoGain);
+        }
+
+        function createUltrasonicPings() {
+            const schedule = () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const duration = 0.1;
+                const time = audioCtx.currentTime;
+
+                osc.frequency.setValueAtTime(17000, time);
+                gain.gain.setValueAtTime(0.02, time);
+                gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+                osc.connect(gain).connect(pulseGain);
+                osc.start(time);
+                osc.stop(time + duration);
+
+                nodes.push(osc, gain);
+
+                const nextDelay = 2000 + Math.random() * 3000;
+                setTimeout(schedule, nextDelay);
+            };
+            schedule();
+        }
+
+        function createChirps() {
+            const schedule = () => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                const time = audioCtx.currentTime;
+                const pitch = 2450 + Math.random() * 100;
+                const duration = 0.3 + Math.random() * 0.2;
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(pitch, time);
+
+                gain.gain.setValueAtTime(0.1, time);
+                gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+                osc.connect(gain).connect(pulseGain);
+                osc.start(time);
+                osc.stop(time + duration);
+
+                nodes.push(osc, gain);
+
+                const nextDelay = 9000 + Math.random() * 2000;
+                setTimeout(schedule, nextDelay);
+            };
+            schedule();
+        }
+
+        function createAmbientPad() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            const lfo = audioCtx.createOscillator();
+            const lfoGain = audioCtx.createGain();
+
+            osc.frequency.value = 432;
+            osc.type = 'sine';
+            gain.gain.value = 0.02;
+
+            lfo.frequency.value = 0.1;
+            lfoGain.gain.value = 0.01;
+
+            lfo.connect(lfoGain).connect(gain.gain);
+            osc.connect(gain).connect(pulseGain);
+
+            osc.start();
+            lfo.start();
+
+            nodes.push(osc, gain, lfo, lfoGain);
+        }
+
+        function createBreathLayer() {
+            const bufferSize = 2 * audioCtx.sampleRate;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.loop = true;
+
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1000;
+            filter.Q.value = 1;
+
+            const gain = audioCtx.createGain();
+            const lfo = audioCtx.createOscillator();
+            const lfoGain = audioCtx.createGain();
+
+            gain.gain.value = 0.03;
+            lfo.frequency.value = 0.2;
+            lfoGain.gain.value = 0.01;
+
+            lfo.connect(lfoGain).connect(gain.gain);
+            source.connect(filter).connect(gain).connect(pulseGain);
+
+            source.start();
+            lfo.start();
+
+            nodes.push(source, filter, gain, lfo, lfoGain);
+        }
+
+        function createPulseGate() {
+            pulseGain = audioCtx.createGain();
+            pulseGain.gain.value = 1;
+            pulseGain.connect(audioCtx.destination);
+
+            if (pulseMode) {
+                let state = true;
+                pulseInterval = setInterval(() => {
+                    state = !state;
+                    pulseGain.gain.setTargetAtTime(state ? 1 : 0.00001, audioCtx.currentTime, 0.1);
+                }, 15000);
+            }
+        }
+
+        function startSignal() {
+            if (audioCtx) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            createPulseGate();
+
+            createModulatedCarrier();     // 7.83 Hz modulating 100 Hz
+            createDynamicTone(528, 0.05, 0.05); // 528 Hz with slow pulsation
+            createUltrasonicPings();     // 17 kHz pings
+            createChirps();              // Variable 2.5 kHz chirps
+            createAmbientPad();          // 432 Hz pad with slow modulation
+            createBreathLayer();         // Filtered noise breath
+        }
+
+        function stopSignal() {
+            nodes.forEach(n => {
+                if (n.stop) n.stop();
+                if (n.disconnect) n.disconnect();
+            });
+            nodes = [];
+            if (pulseInterval) clearInterval(pulseInterval);
+            if (audioCtx) {
+                audioCtx.close();
+                audioCtx = null;
+            }
+        }
+
+        function togglePulseMode() {
+            pulseMode = !pulseMode;
+            stopSignal();
+            startSignal();
+        }
+    </script>
+</body>
+
+</html>
