@@ -1,5 +1,5 @@
-Inspired by: https://x.com/JasonWilde108/status/1910816547070685522?s=19
 Demo: https://uap-tech.github.io/dogwhistle/
+Inspired by: https://x.com/JasonWilde108/status/1910816547070685522?s=19
 Original post:
 Jason Wilde
 @JasonWilde108
